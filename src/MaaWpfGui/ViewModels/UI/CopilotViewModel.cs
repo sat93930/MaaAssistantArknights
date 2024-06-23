@@ -309,6 +309,8 @@ namespace MaaWpfGui.ViewModels.UI
             return names.Select(str => regex.Match(str)).FirstOrDefault(result => result.Success)?.Value ?? string.Empty;
         }
 
+        private string _language = ConfigurationHelper.GetValue(ConfigurationKeys.Localization, LocalizationHelper.DefaultLanguage);
+
         private void ParseJsonAndShowInfo(string jsonStr)
         {
             try
@@ -329,9 +331,16 @@ namespace MaaWpfGui.ViewModels.UI
 
                 var doc = (JObject?)json["doc"];
                 string title = string.Empty;
+                bool languageIsGlobal = _language == "en-us" | _language == "ja-jp" | _language == "ko-kr";
+
                 if (doc != null && doc.TryGetValue("title", out var titleValue))
                 {
                     title = titleValue.ToString();
+                    if (languageIsGlobal && doc.TryGetValue("title_global", out var titleGlobalValue))
+                    {
+                        title = titleGlobalValue.ToString();
+                    }
+
                     CopilotTaskName = FindStageName((IsDataFromWeb ? string.Empty : _filename).Split(Path.DirectorySeparatorChar).LastOrDefault()?.Split('.').FirstOrDefault() ?? string.Empty, title);
                 }
 
@@ -350,6 +359,10 @@ namespace MaaWpfGui.ViewModels.UI
                 if (doc != null && doc.TryGetValue("details", out var detailsValue))
                 {
                     details = detailsValue.ToString();
+                    if (languageIsGlobal && doc.TryGetValue("details_global", out var detailsGlobalValue))
+                    {
+                        details = detailsGlobalValue.ToString();
+                    }
                 }
 
                 if (details.Length != 0)
@@ -373,11 +386,18 @@ namespace MaaWpfGui.ViewModels.UI
                 }
 
                 AddLog(string.Empty, UiLogColor.Message, showTime: false);
+                AddLog("------------------------------------------------", UiLogColor.Message, showTime: false);
+                AddLog(string.Empty, UiLogColor.Message, showTime: false);
+
                 int count = 0;
                 foreach (var oper in json["opers"] ?? new JArray())
                 {
                     count++;
-                    AddLog($"{oper["name"]}, {oper["skill"]} 技能", UiLogColor.Message, showTime: false);
+
+                    var localizedName = DataHelper.GetLocalizedCharacterName((string?)oper["name"], _language);
+
+                    string operLog = languageIsGlobal ? $"{localizedName}, skill {oper["skill"]}" : $"{localizedName}, {oper["skill"]} 技能";
+                    AddLog(operLog, UiLogColor.Message, showTime: false);
                 }
 
                 if (json.TryGetValue("groups", out var groupsValue))
@@ -386,13 +406,28 @@ namespace MaaWpfGui.ViewModels.UI
                     {
                         count++;
                         string groupName = group["name"] + ": ";
-                        var operInfos = group["opers"]!.Cast<JObject>().Select(oper => $"{oper["name"]} {oper["skill"]}").ToList();
+                        var operInfos = group["opers"]!.Cast<JObject>().Select(oper =>
+                        $"{DataHelper.GetLocalizedCharacterName((string?)oper["name"], _language)} {oper["skill"]}").ToList();
 
                         AddLog(groupName + string.Join(" / ", operInfos), UiLogColor.Message, showTime: false);
                     }
                 }
 
-                AddLog($"共 {count} 名干员", UiLogColor.Message, showTime: false);
+                if (languageIsGlobal)
+                {
+                    if (count > 1)
+                    {
+                        AddLog($"{count} operators in total", UiLogColor.Message, showTime: false);
+                    }
+                    else
+                    {
+                        AddLog($"{count} operator in total", UiLogColor.Message, showTime: false);
+                    }
+                }
+                else
+                {
+                    AddLog($"共 {count} 名干员", UiLogColor.Message, showTime: false);
+                }
 
                 if (json.TryGetValue("type", out var typeValue))
                 {
@@ -401,19 +436,28 @@ namespace MaaWpfGui.ViewModels.UI
                     {
                         _taskType = "SSSCopilot";
 
+                        if (json.TryGetValue("buff", out var buffValue))
+                        {
+                            string buffLog = languageIsGlobal ? "Directional EC unit: " : "导能原件：";
+                            AddLog(buffLog + DataHelper.GetLocalizedCharacterName((string?)buffValue, _language), UiLogColor.Message, showTime: false);
+                        }
+
                         if (json.TryGetValue("tool_men", out var toolMenValue))
                         {
-                            AddLog("编队工具人：\n" + toolMenValue, UiLogColor.Message, showTime: false);
+                            string toolMenLog = languageIsGlobal ? "Other Operators:\n" : "编队工具人：\n";
+                            AddLog(toolMenLog + toolMenValue, UiLogColor.Message, showTime: false);
                         }
 
                         if (json.TryGetValue("equipment", out var equipmentValue) && equipmentValue is JArray equipmentJArray)
                         {
-                            AddLog("开局装备（横向）：\n" + string.Join('\n', equipmentJArray.Select(i => (string?)i).Chunk(4).Select(i => string.Join(",", i))), UiLogColor.Message, showTime: false);
+                            string equipmentLog = languageIsGlobal ? "Tactical Equipment (horizontal):\n" : "开局装备（横向）：\n";
+                            AddLog(equipmentLog + string.Join('\n', equipmentJArray.Select(i => (string?)i).Chunk(4).Select(i => string.Join(",", i))), UiLogColor.Message, showTime: false);
                         }
 
                         if (json.TryGetValue("strategy", out var strategyValue))
                         {
-                            AddLog("开局策略：" + strategyValue, UiLogColor.Message, showTime: false);
+                            string strategyLog = languageIsGlobal ? "Strategy: " : "开局策略：";
+                            AddLog(strategyLog + strategyValue, UiLogColor.Message, showTime: false);
                         }
                     }
                 }
